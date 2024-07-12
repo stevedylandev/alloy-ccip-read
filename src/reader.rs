@@ -102,8 +102,8 @@ where
         CCIPReaderBuilder::default()
     }
 
-    /// Creates an instance of CCIPReadMiddleware
-    /// `ìnner` the inner Middleware
+    /// Creates an instance of CCIPReader
+    /// `ìnner` the inner Provider
     pub fn new(inner: P) -> Self {
         Self::builder().with_provider(inner).build().unwrap()
     }
@@ -122,7 +122,7 @@ where
         self.call_ccip(tx).await.map(|(result, _)| result)
     }
 
-    /// Call the underlying middleware with the provided transaction and block,
+    /// Perform eth_call with tx, and handle CCIP requests if needed
     /// returning both the result of the call and the CCIP requests made during the call
     pub async fn call_ccip(
         &self,
@@ -337,7 +337,7 @@ where
     }
 }
 
-// // TODO: add all the methods from ethers-rs
+// // TODO: add all the methods from ethers-ccip-read
 
 // /// Middleware implementation for CCIPReadMiddleware
 // #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]

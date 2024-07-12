@@ -26,7 +26,7 @@ pub struct CCIPFetchError(pub(crate) HashMap<String, Vec<String>>);
 /// Handle CCIP-Read middlware specific errors.
 #[derive(Error, Debug)]
 pub enum CCIPReaderError {
-    /// Thrown when the internal middleware errors
+    /// Thrown when the internal errors
     #[error("{0}")]
     Internal(anyhow::Error),
 
