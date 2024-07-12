@@ -1,5 +1,5 @@
 use alloy::sol;
-
+// https://github.com/OpenZeppelin/openzeppelin-contracts/blob/05f218fb6617932e56bf5388c3b389c3028a7b73/contracts/utils/introspection/IERC165.sol
 sol!(
     #[allow(missing_docs)]
     #[sol(rpc)]
@@ -8,6 +8,7 @@ sol!(
     }
 );
 
+// https://github.com/ensdomains/ens-contracts/blob/3c960892bf13e8317544b9287214dfc9af85f559/contracts/resolvers/profiles/IAddrResolver.sol
 sol! {
     #[allow(missing_docs)]
     #[sol(rpc)]
@@ -17,6 +18,25 @@ sol! {
     }
 }
 
+// https://github.com/ensdomains/ens-contracts/blob/3c960892bf13e8317544b9287214dfc9af85f559/contracts/resolvers/profiles/ITextResolver.sol
+sol! {
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    interface ITextResolver {
+        event TextChanged(
+            bytes32 indexed node,
+            string indexed indexedKey,
+            string key,
+            string value
+        );
+        function text(
+            bytes32 node,
+            string calldata key
+        ) external view returns (string memory);
+    }
+}
+
+// https://github.com/ensdomains/ens-contracts/blob/3c960892bf13e8317544b9287214dfc9af85f559/contracts/resolvers/profiles/IExtendedResolver.sol
 sol! {
     #[allow(missing_docs)]
     #[sol(rpc)]
@@ -28,6 +48,7 @@ sol! {
     }
 }
 
+// https://eips.ethereum.org/EIPS/eip-3668#contract-interface
 sol! {
     #[allow(missing_docs)]
     #[sol(rpc)]
@@ -42,6 +63,7 @@ sol! {
     }
 }
 
+//https://github.com/ensdomains/ens-contracts/blob/3c960892bf13e8317544b9287214dfc9af85f559/contracts/registry/ENS.sol
 sol! {
     #[allow(missing_docs)]
     #[sol(rpc)]
