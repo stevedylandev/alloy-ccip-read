@@ -8,7 +8,7 @@ on:
 
 jobs:
   check:
-    name: Ethers-rs CCIP-Read Middleware 
+    name: Alloy-rs CCIP Reader
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2

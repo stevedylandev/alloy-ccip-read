@@ -1,8 +1,8 @@
-use ethers_core::utils::hex::FromHexError;
-use std::collections::HashMap;
-use std::fmt::Display;
-
-use ethers_providers::{Middleware, MiddlewareError};
+use alloy::{
+    hex::FromHexError,
+    transports::{RpcError, TransportErrorKind},
+};
+use std::{collections::HashMap, fmt::Display};
 use thiserror::Error;
 
 #[allow(clippy::enum_variant_names)]
@@ -25,56 +25,50 @@ pub struct CCIPFetchError(pub(crate) HashMap<String, Vec<String>>);
 
 /// Handle CCIP-Read middlware specific errors.
 #[derive(Error, Debug)]
-pub enum CCIPReadMiddlewareError<M: Middleware> {
+pub enum CCIPReaderError {
     /// Thrown when the internal middleware errors
     #[error("{0}")]
-    MiddlewareError(M::Error),
+    Internal(anyhow::Error),
+
+    #[error("contract call error: {0}")]
+    ContractCall(#[from] alloy::contract::Error),
+
+    #[error("rpc error: {0}")]
+    Rpc(#[from] RpcError<TransportErrorKind>),
+
+    #[error("abi encode or decode error: {0}")]
+    AbiEncodeDecode(#[from] alloy::sol_types::Error),
 
     #[error("Error(s) during CCIP fetch: {0}")]
-    FetchError(CCIPFetchError),
+    Fetch(CCIPFetchError),
 
     #[error("CCIP Read sender did not match {}", sender)]
-    SenderError { sender: String },
+    Sender { sender: String },
 
     #[error("CCIP Read no provided URLs")]
-    GatewayNotFoundError,
+    GatewayNotFound,
 
     #[error("CCIP Read exceeded maximum redirections")]
-    MaxRedirectionError,
+    MaxRedirection,
+
+    #[error("error decoding from hex: {0}")]
+    HexDecode(#[from] FromHexError),
+
+    #[error("Invalid domain: {0}")]
+    InvalidDomain(String),
 
     /// Invalid reverse ENS name
     #[error("Reversed ens name not pointing to itself: {0}")]
+    #[allow(dead_code)]
     EnsNotOwned(String),
 
     #[error("Error(s) during parsing avatar url: {0}")]
-    URLParseError(String),
+    #[allow(dead_code)]
+    URLParse(String),
 
     #[error("Error(s) during NFT ownership verification: {0}")]
-    NFTOwnerError(String),
-
-    #[error("Error(s) decoding revert bytes: {0}")]
-    HexDecodeError(#[from] FromHexError),
-
-    #[error("Error(s) decoding abi: {0}")]
-    AbiDecodeError(#[from] ethers_core::abi::Error),
-
-    #[error("Unsupported URL scheme")]
-    UnsupportedURLSchemeError,
-}
-
-impl<M: Middleware> MiddlewareError for CCIPReadMiddlewareError<M> {
-    type Inner = M::Error;
-
-    fn from_err(src: M::Error) -> Self {
-        CCIPReadMiddlewareError::MiddlewareError(src)
-    }
-
-    fn as_inner(&self) -> Option<&Self::Inner> {
-        match self {
-            CCIPReadMiddlewareError::MiddlewareError(e) => Some(e),
-            _ => None,
-        }
-    }
+    #[allow(dead_code)]
+    NFTOwner(String),
 }
 
 impl Display for CCIPFetchError {

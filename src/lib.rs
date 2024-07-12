@@ -1,18 +1,18 @@
-//! # Ethers CCIP-Read
+//! # Alloy CCIP-Read
 //!
-//! Provides an [ethers](https://docs.rs/ethers) compatible middleware for submitting
-pub use errors::CCIPReadMiddlewareError;
-use ethers_core::types::{Address, Bytes};
-pub use middleware::CCIPReadMiddleware;
+//! Provides an [alloy](https://docs.rs/alloy) reader for the [CCIP-Read](https://eips.ethereum.org/EIPS/eip-3675) standard.
+
+pub use ccip::handle_ccip;
+pub use domain_id::{namehash, DomainIdProvider, NamehashIdProvider};
+pub use errors::*;
+pub use reader::CCIPReader;
+pub use types::*;
 
 mod ccip;
+pub mod consts;
+mod contracts;
+mod domain_id;
 mod errors;
-mod middleware;
+mod reader;
+mod types;
 pub mod utils;
-
-#[derive(Debug, Clone)]
-pub struct CCIPRequest {
-    pub url: String,
-    pub sender: Address,
-    pub calldata: Bytes,
-}

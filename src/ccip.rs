@@ -1,22 +1,68 @@
-use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
-
-use ethers_core::types::transaction::eip2718::TypedTransaction;
-use ethers_core::types::{Address, Bytes};
-use ethers_core::utils::hex;
-use ethers_providers::Middleware;
+use crate::{
+    errors::{CCIPFetchError, CCIPReaderError, CCIPRequestError},
+    utils::truncate_str,
+    CCIPRequest, CCIPResponse,
+};
+use alloy::{
+    hex,
+    primitives::{Address, Bytes},
+    rpc::types::TransactionRequest,
+};
 use reqwest::Response;
-use serde::Deserialize;
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
-use crate::errors::{CCIPFetchError, CCIPRequestError};
-use crate::utils::truncate_str;
-use crate::CCIPReadMiddlewareError;
-use crate::CCIPRequest;
+/// This function makes a Cross-Chain Interoperability Protocol (CCIP-Read) request
+/// and returns the result as `Bytes` or an error message.
+///
+/// # Arguments
+///
+/// * `sender`: The sender's address.
+/// * `tx`: The typed transaction.
+/// * `calldata`: The function call data as bytes.
+/// * `urls`: A vector of Offchain Gateway URLs to send the request to.
+///
+/// # Returns
+///
+/// an opaque byte string to send to callbackFunction on Offchain Resolver contract.
+pub async fn handle_ccip(
+    client: &reqwest::Client,
+    sender: &Address,
+    tx: &TransactionRequest,
+    calldata: &[u8],
+    urls: Vec<String>,
+) -> Result<(Bytes, Vec<CCIPRequest>), CCIPReaderError> {
+    // If there are no URLs or the transaction's destination is empty, return an empty result
+    if urls.is_empty() || tx.to.is_none() {
+        return Ok((Bytes::new(), Vec::new()));
+    }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct CCIPResponse {
-    pub data: Option<String>,
-    pub message: Option<String>,
+    let urls = dedup_ord(&urls);
+
+    // url —> [error_message]
+    let mut errors: HashMap<String, Vec<String>> = HashMap::new();
+
+    let mut requests = Vec::new();
+
+    for url in urls {
+        let result = handle_ccip_raw(client, &url, sender, calldata).await;
+        requests.push(CCIPRequest {
+            url: url.clone(),
+            sender: *sender,
+            calldata: calldata.to_vec().into(),
+        });
+
+        match result {
+            Ok(result) => return Ok((result, requests)),
+            Err(err) => {
+                errors.entry(url).or_default().push(err.to_string());
+            }
+        }
+    }
+
+    Err(CCIPReaderError::Fetch(CCIPFetchError(errors)))
 }
 
 pub async fn handle_ccip_raw(
@@ -78,57 +124,6 @@ pub async fn handle_ccip_raw(
     Err(CCIPRequestError::GatewayFormatError(
         "response format error: invalid response".to_string(),
     ))
-}
-
-/// This function makes a Cross-Chain Interoperability Protocol (CCIP-Read) request
-/// and returns the result as `Bytes` or an error message.
-///
-/// # Arguments
-///
-/// * `sender`: The sender's address.
-/// * `tx`: The typed transaction.
-/// * `calldata`: The function call data as bytes.
-/// * `urls`: A vector of Offchain Gateway URLs to send the request to.
-///
-/// # Returns
-///
-/// an opaque byte string to send to callbackFunction on Offchain Resolver contract.
-pub async fn handle_ccip<M: Middleware>(
-    client: &reqwest::Client,
-    sender: &Address,
-    tx: &TypedTransaction,
-    calldata: &[u8],
-    urls: Vec<String>,
-) -> Result<(Bytes, Vec<CCIPRequest>), CCIPReadMiddlewareError<M>> {
-    // If there are no URLs or the transaction's destination is empty, return an empty result
-    if urls.is_empty() || tx.to().is_none() {
-        return Ok((Bytes::new(), Vec::new()));
-    }
-
-    let urls = dedup_ord(&urls);
-
-    // url —> [error_message]
-    let mut errors: HashMap<String, Vec<String>> = HashMap::new();
-
-    let mut requests = Vec::new();
-
-    for url in urls {
-        let result = handle_ccip_raw(client, &url, sender, calldata).await;
-        requests.push(CCIPRequest {
-            url: url.clone(),
-            sender: *sender,
-            calldata: calldata.to_vec().into(),
-        });
-
-        match result {
-            Ok(result) => return Ok((result, requests)),
-            Err(err) => {
-                errors.entry(url).or_default().push(err.to_string());
-            }
-        }
-    }
-
-    Err(CCIPReadMiddlewareError::FetchError(CCIPFetchError(errors)))
 }
 
 fn dedup_ord<T: Clone + Hash + Eq>(src: &[T]) -> Vec<T> {

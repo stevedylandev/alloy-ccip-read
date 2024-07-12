@@ -1,20 +1,18 @@
 [package]
-name = "ethers-ccip-read"
+name = "alloy-ccip-read"
 version = "0.1.1"
-authors = ["Muhamed Tanrikulu <muhammed@ens.domains>"]
+authors = ["Lev Lymarenko its@llev.me"]
 license = "MIT"
 edition = "2018"
 readme = "./README.md"
-documentation = "https://docs.rs/ethers-ccip-read"
-repository = "https://github.com/ensdomains/ethers-ccip-read"
-homepage = "https://github.com/ensdomains/ethers-ccip-read"
-keywords = ["ens", "ethers", "ccip-read", "offchain-resolver", "l2-resolver"]
+repository = "https://github.com/sevenzing/alloy-ccip-read"
+homepage = "https://github.com/sevenzing/alloy-ccip-read"
+keywords = ["ens", "alloy", "ccip-read", "offchain-resolver", "l2-resolver"]
 description = """
-CCIP-Read middleware for ethers-rs
+CCIP-Read middleware for alloy-rs
 """
 exclude = [
     ".github",
-    "examples"
 ]
 
 [dependencies]
@@ -29,21 +27,22 @@ serde_json = "1.0.108"
 serde = { version = "1.0.192", features = ["derive"] }
 
 # HTTP
-reqwest = "0.11.22"
+reqwest = {version = "0.12", features = ["json"]}
 
 # Async
 async-recursion = "1.0.5"
 async-trait = { version = "0.1.74", default-features = false }
 
-# Ethers
-ethers-core = "2.0.11"
-ethers-providers = "2.0.11"
+# Alloy
+alloy = { version = "0.1", features = ["full", "json-rpc"] }
 futures-util = "0.3.29"
+anyhow = "1.0.75"
+tracing-subscriber = "0.3.18"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 tokio = { version = "1.34.0", features = ["macros", "rt-multi-thread"] }
-ethers = "2.0.11"
+alloy = { version = "0.1", features = ["full"] }
 anyhow = "1.0.75"

@@ -1,26 +1,29 @@
-use std::convert::TryFrom;
-
+use alloy::providers::ProviderBuilder;
+use alloy_ccip_read::CCIPReader;
 use anyhow::Result;
-use ethers::prelude::*;
-
-use ethers_ccip_read::CCIPReadMiddleware;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Connect to the network
-    let provider = Provider::<Http>::try_from("https://your.web3.provider")?;
+    tracing_subscriber::fmt::init();
+    let rpc = alloy_ccip_read::consts::DEFAULT_ETHEREUM_RPC_URL;
+    let provider = ProviderBuilder::new().on_http(rpc.parse().unwrap());
+    let reader = CCIPReader::new(provider.boxed());
+    for ens_name in [
+        "1.offchainexample.eth",
+        "levvv.xyz",
+        "itslev.cb.id",
+        "llev.me",
+    ] {
+        println!("\nresolving name: {}", ens_name);
+        let resolver_address = reader.get_resolver(ens_name).await.unwrap();
+        println!("resolver_address: {:?}", resolver_address);
 
-    // Add ccip-read middleware
-    let provider = CCIPReadMiddleware::new(provider);
+        let supports_wildcard = reader.supports_wildcard(resolver_address).await.unwrap();
+        println!("supports_wildcard: {:?}", supports_wildcard);
 
-    let ens_name = "1.offchainexample.eth";
-    let resolver_address = provider.get_resolver(ens_name).await.unwrap();
-    println!("resolver_address: {:?}", resolver_address);
+        let resolved_address = reader.resolve_name(ens_name).await.unwrap();
+        println!("resolved_address: {:?}", resolved_address);
+    }
 
-    let supports_wildcard = provider.supports_wildcard(resolver_address).await.unwrap();
-    println!("supports_wildcard: {:?}", supports_wildcard);
-
-    let resolved_address = provider.resolve_name(ens_name).await.unwrap();
-    println!("resolved_address: {:?}", resolved_address);
     Ok(())
 }

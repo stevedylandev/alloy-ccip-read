@@ -1,5 +1,4 @@
-use ethers_core::abi;
-use ethers_core::abi::{Detokenize, ParamType};
+use anyhow::bail;
 use std::time::Duration;
 
 pub(crate) fn truncate_str(src: &str, side: usize) -> String {
@@ -10,12 +9,6 @@ pub(crate) fn truncate_str(src: &str, side: usize) -> String {
     format!("{}..{}", &src[..side], &src[src.len() - side..])
 }
 
-pub(crate) fn decode_bytes<T: Detokenize>(param: ParamType, bytes: &[u8]) -> Result<T, abi::Error> {
-    let tokens = abi::decode(&[param], bytes)?;
-    T::from_tokens(tokens).map_err(|err| abi::Error::Other(err.to_string().into()))
-}
-
-#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn build_reqwest(timeout: Duration) -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(timeout)
@@ -23,10 +16,8 @@ pub(crate) fn build_reqwest(timeout: Duration) -> reqwest::Client {
         .expect("should be a valid reqwest client")
 }
 
-#[cfg(target_arch = "wasm32")]
-pub(crate) fn build_reqwest(_timeout: Duration) -> reqwest::Client {
-    // reqwest doesn't support timeouts on wasm
-    reqwest::Client::new()
+pub(crate) fn sanitaze_error_data_from_rpc(data: String) -> String {
+    data.trim_start_matches("Reverted").trim().to_string()
 }
 
 /// Encodes a domain name into its binary representation according to the DNS
@@ -46,19 +37,19 @@ pub(crate) fn build_reqwest(_timeout: Duration) -> reqwest::Client {
 /// # Example
 ///
 /// ```
-/// use ethers_ccip_read::utils::{dns_encode};
+/// use alloy_ccip_read::utils::{dns_encode};
 ///
 /// let encoded = dns_encode("tanrikulu.eth").unwrap();
 /// assert_eq!(encoded, vec![9, b't', b'a', b'n', b'r', b'i', b'k', b'u', b'l', b'u', 3, b'e', b't', b'h', 0]);
 /// ```
-pub fn dns_encode(domain: &str) -> Result<Vec<u8>, String> {
+pub fn dns_encode(domain: &str) -> Result<Vec<u8>, anyhow::Error> {
     let mut encoded = Vec::new();
     let labels = domain.split('.');
 
     for label in labels {
         let label_len = label.len();
         if label_len > 63 {
-            return Err(format!("Label is too long: {}", label));
+            bail!("Label is too long: {}", label)
         }
 
         encoded.push(label_len as u8);
@@ -99,8 +90,8 @@ mod tests {
         let encoded_name = dns_encode(ens_name);
 
         assert_eq!(
-            encoded_name.unwrap_err(),
-            format!("Label is too long: {}", labels.next().unwrap()),
+            encoded_name.unwrap_err().to_string(),
+            format!("Label is too long: {}", labels.next().unwrap())
         );
     }
 }
