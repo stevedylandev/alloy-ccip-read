@@ -46,13 +46,12 @@ pub fn dns_encode(domain: &str) -> Result<Vec<u8>, anyhow::Error> {
 /// Returns an iterator over the parent names of a given domain name.
 /// ```
 /// use alloy_ccip_read::utils::iter_parent_names;
-/// use std::iter::FromIterator;
 ///
-/// let parent_names = Vec::from_iter(iter_parent_names("tanrikulu.eth"));
+/// let parent_names = iter_parent_names("tanrikulu.eth");
 /// assert_eq!(parent_names, vec!["tanrikulu.eth", "eth"]);
 /// ```
-pub fn iter_parent_names(name: &str) -> impl IntoIterator<Item = &str> {
-    successors(Some(name), |&last| last.split_once('.').map(|it| it.1))
+pub fn iter_parent_names(name: &str) -> Vec<&str> {
+    successors(Some(name), |&last| last.split_once('.').map(|it| it.1)).collect()
 }
 
 pub(crate) fn truncate_str(src: &str, side: usize) -> String {
