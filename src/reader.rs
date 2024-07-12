@@ -1,4 +1,7 @@
-use crate::{domain_id::DomainIdProvider, errors::CCIPReaderError, types::ResolveResult};
+use crate::{
+    domain_id::DomainIdProvider, errors::CCIPReaderError, types::ResolveResult,
+    utils::iter_parent_names,
+};
 use alloy::{
     eips::BlockId,
     hex::FromHex,
@@ -10,7 +13,7 @@ use alloy::{
 };
 use async_recursion::async_recursion;
 use serde_json::Value;
-use std::{iter::successors, time::Duration};
+use std::time::Duration;
 
 use crate::{
     ccip, consts, contracts,
@@ -159,7 +162,7 @@ where
     }
 
     pub async fn get_resolver(&self, name: &str) -> Result<Address, CCIPReaderError> {
-        for parent_name in Self::iter_parent_names(name) {
+        for parent_name in iter_parent_names(name) {
             if parent_name.is_empty() || parent_name.eq(".") {
                 return Ok(Address::ZERO);
             }
@@ -201,10 +204,6 @@ where
             .await?;
 
         Ok(ResolveResult { addr: response._0 })
-    }
-
-    pub fn iter_parent_names(name: &str) -> Vec<&str> {
-        successors(Some(name), |&last| last.split_once('.').map(|it| it.1)).collect()
     }
 
     async fn query_resolver_parameters<C: SolCall>(

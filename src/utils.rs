@@ -1,24 +1,5 @@
 use anyhow::bail;
-use std::time::Duration;
-
-pub(crate) fn truncate_str(src: &str, side: usize) -> String {
-    if src.len() < side * 2 + 3 {
-        return src.to_string();
-    }
-
-    format!("{}..{}", &src[..side], &src[src.len() - side..])
-}
-
-pub(crate) fn build_reqwest(timeout: Duration) -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(timeout)
-        .build()
-        .expect("should be a valid reqwest client")
-}
-
-pub(crate) fn sanitaze_error_data_from_rpc(data: String) -> String {
-    data.trim_start_matches("Reverted").trim().to_string()
-}
+use std::{iter::successors, time::Duration};
 
 /// Encodes a domain name into its binary representation according to the DNS
 /// wire format. Each label (i.e., substring separated by dots) in the domain
@@ -37,7 +18,7 @@ pub(crate) fn sanitaze_error_data_from_rpc(data: String) -> String {
 /// # Example
 ///
 /// ```
-/// use alloy_ccip_read::utils::{dns_encode};
+/// use alloy_ccip_read::utils::dns_encode;
 ///
 /// let encoded = dns_encode("tanrikulu.eth").unwrap();
 /// assert_eq!(encoded, vec![9, b't', b'a', b'n', b'r', b'i', b'k', b'u', b'l', b'u', 3, b'e', b't', b'h', 0]);
@@ -60,6 +41,37 @@ pub fn dns_encode(domain: &str) -> Result<Vec<u8>, anyhow::Error> {
     encoded.push(0);
 
     Ok(encoded)
+}
+
+/// Returns an iterator over the parent names of a given domain name.
+/// ```
+/// use alloy_ccip_read::utils::iter_parent_names;
+/// use std::iter::FromIterator;
+///
+/// let parent_names = Vec::from_iter(iter_parent_names("tanrikulu.eth"));
+/// assert_eq!(parent_names, vec!["tanrikulu.eth", "eth"]);
+/// ```
+pub fn iter_parent_names(name: &str) -> impl IntoIterator<Item = &str> {
+    successors(Some(name), |&last| last.split_once('.').map(|it| it.1))
+}
+
+pub(crate) fn truncate_str(src: &str, side: usize) -> String {
+    if src.len() < side * 2 + 3 {
+        return src.to_string();
+    }
+
+    format!("{}..{}", &src[..side], &src[src.len() - side..])
+}
+
+pub(crate) fn build_reqwest(timeout: Duration) -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .expect("should be a valid reqwest client")
+}
+
+pub(crate) fn sanitaze_error_data_from_rpc(data: String) -> String {
+    data.trim_start_matches("Reverted").trim().to_string()
 }
 
 #[cfg(test)]
