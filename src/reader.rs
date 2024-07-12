@@ -21,34 +21,38 @@ use crate::{
     CCIPRequest, NamehashIdProvider,
 };
 
-pub struct CCIPReader<P> {
+pub struct CCIPReader<P, D> {
     provider: P,
     ens: contracts::ENS::ENSInstance<BoxTransport, P>,
     reqwest_client: reqwest::Client,
     max_redirect_attempt: u8,
+    domain_id_provider: D,
 }
 
-pub struct CCIPReaderBuilder<P> {
+pub struct CCIPReaderBuilder<P, D> {
     provider: Option<P>,
     ens_address: Option<Address>,
     timeout: Option<Duration>,
     max_redirect_attempt: Option<u8>,
+    domain_id_provider: D,
 }
 
-impl<P> Default for CCIPReaderBuilder<P> {
+impl<P> Default for CCIPReaderBuilder<P, NamehashIdProvider> {
     fn default() -> Self {
         CCIPReaderBuilder {
             provider: None,
             ens_address: None,
             timeout: None,
             max_redirect_attempt: None,
+            domain_id_provider: NamehashIdProvider,
         }
     }
 }
 
-impl<P> CCIPReaderBuilder<P>
+impl<P, D> CCIPReaderBuilder<P, D>
 where
     P: alloy::providers::Provider + Clone,
+    D: DomainIdProvider,
 {
     pub fn with_provider(mut self, provider: P) -> Self {
         self.provider = Some(provider);
@@ -70,12 +74,17 @@ where
         self
     }
 
-    // pub fn with_domain_id_provider(mut self, domain_id_provider: D) -> Self {
-    //     self.domain_id_provider = domain_id_provider;
-    //     self
-    // }
+    pub fn with_domain_id_provider<D2>(self, domain_id_provider: D2) -> CCIPReaderBuilder<P, D2> {
+        CCIPReaderBuilder {
+            provider: self.provider,
+            ens_address: self.ens_address,
+            timeout: self.timeout,
+            max_redirect_attempt: self.max_redirect_attempt,
+            domain_id_provider,
+        }
+    }
 
-    pub fn build(self) -> Result<CCIPReader<P>, String> {
+    pub fn build(self) -> Result<CCIPReader<P, D>, String> {
         let ens_address = self.ens_address.unwrap_or(consts::MAINNET_ENS_ADDRESS);
         let provider = self.provider.ok_or("provider is required".to_string())?;
         Ok(CCIPReader {
@@ -83,24 +92,31 @@ where
             provider,
             reqwest_client: build_reqwest(self.timeout.unwrap_or(Duration::from_secs(10))),
             max_redirect_attempt: self.max_redirect_attempt.unwrap_or(10),
+            domain_id_provider: self.domain_id_provider,
         })
     }
 }
 
-impl<P> CCIPReader<P>
+impl<P> CCIPReader<P, NamehashIdProvider>
 where
     P: alloy::providers::Provider + Clone,
 {
+    pub fn builder() -> CCIPReaderBuilder<P, NamehashIdProvider> {
+        CCIPReaderBuilder::default()
+    }
+
     /// Creates an instance of CCIPReadMiddleware
     /// `ìnner` the inner Middleware
     pub fn new(inner: P) -> Self {
         Self::builder().with_provider(inner).build().unwrap()
     }
+}
 
-    pub fn builder() -> CCIPReaderBuilder<P> {
-        CCIPReaderBuilder::default()
-    }
-
+impl<P, D> CCIPReader<P, D>
+where
+    P: alloy::providers::Provider + Clone,
+    D: DomainIdProvider + Send + Sync,
+{
     pub fn provider(&self) -> &P {
         &self.provider
     }
@@ -146,15 +162,6 @@ where
     }
 
     pub async fn get_resolver(&self, name: &str) -> Result<Address, CCIPReaderError> {
-        self.get_resolver_custom_domain(name, &NamehashIdProvider)
-            .await
-    }
-
-    pub async fn get_resolver_custom_domain<D: DomainIdProvider>(
-        &self,
-        name: &str,
-        domain_id_provider: &D,
-    ) -> Result<Address, CCIPReaderError> {
         for parent_name in Self::iter_parent_names(name) {
             if parent_name.is_empty() || parent_name.eq(".") {
                 return Ok(Address::ZERO);
@@ -164,7 +171,7 @@ where
                 return Ok(Address::ZERO);
             }
 
-            let name_id = domain_id_provider.generate(parent_name);
+            let name_id = self.domain_id_provider.generate(parent_name);
             let data = self.ens.resolver(name_id).call().await?;
             let resolver_address = data._0;
 
@@ -180,19 +187,8 @@ where
     }
 
     pub async fn resolve_name(&self, name: &str) -> Result<ResolveResult, CCIPReaderError> {
-        self.resolve_name_custom_domain(name, &NamehashIdProvider)
-            .await
-    }
-
-    pub async fn resolve_name_custom_domain<D: DomainIdProvider>(
-        &self,
-        name: &str,
-        domain_id_provider: &D,
-    ) -> Result<ResolveResult, CCIPReaderError> {
-        let resolver_address = self
-            .get_resolver_custom_domain(name, domain_id_provider)
-            .await?;
-        self.resolve_name_with_resolver_custom_domain(name, resolver_address, domain_id_provider)
+        let resolver_address = self.get_resolver(name).await?;
+        self.resolve_name_with_resolver(name, resolver_address)
             .await
     }
 
@@ -201,17 +197,7 @@ where
         name: &str,
         resolver_address: Address,
     ) -> Result<ResolveResult, CCIPReaderError> {
-        self.resolve_name_with_resolver_custom_domain(name, resolver_address, &NamehashIdProvider)
-            .await
-    }
-
-    pub async fn resolve_name_with_resolver_custom_domain<D: DomainIdProvider>(
-        &self,
-        name: &str,
-        resolver_address: Address,
-        domain_id_provider: &D,
-    ) -> Result<ResolveResult, CCIPReaderError> {
-        let node = domain_id_provider.generate(name);
+        let node = self.domain_id_provider.generate(name);
         let addr_call = contracts::IAddrResolver::addrCall { node };
         let response: contracts::IAddrResolver::addrReturn = self
             .query_resolver_parameters(name, resolver_address, addr_call)
@@ -489,11 +475,13 @@ where
 mod tests {
     use alloy::{
         hex,
-        primitives::address,
+        primitives::{address, B256},
         providers::{ProviderBuilder, RootProvider},
         transports::BoxTransport,
     };
     use std::str::FromStr;
+
+    use crate::namehash;
 
     use super::*;
 
@@ -503,7 +491,7 @@ mod tests {
             .boxed()
     }
 
-    fn default_reader() -> CCIPReader<RootProvider<BoxTransport>> {
+    fn default_reader() -> CCIPReader<RootProvider<BoxTransport>, NamehashIdProvider> {
         CCIPReader::new(default_provider())
     }
 
@@ -577,6 +565,34 @@ mod tests {
         let record: String = String::abi_decode(&data, true).unwrap();
 
         assert_eq!(record, email);
+    }
+
+    #[tokio::test]
+    async fn test_custom_domain_id_provider() {
+        #[derive(Clone)]
+        struct CustomDomainIdProvider;
+
+        impl DomainIdProvider for CustomDomainIdProvider {
+            fn generate(&self, name: &str) -> B256 {
+                namehash(&format!("{}.eth", name))
+            }
+        }
+
+        let always_eth_reader = CCIPReader::builder()
+            .with_provider(default_provider())
+            .with_domain_id_provider(CustomDomainIdProvider)
+            .build()
+            .unwrap();
+
+        let resolver_address = always_eth_reader
+            .resolve_name("vitalik")
+            .await
+            .unwrap()
+            .addr;
+        assert_eq!(
+            resolver_address,
+            Address::from_str("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045").unwrap()
+        );
     }
 
     // // TODO: rewrite this test when alloy will support mocked provider
