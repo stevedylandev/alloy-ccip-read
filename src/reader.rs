@@ -1,7 +1,4 @@
-use crate::{
-    contracts::IOffChain::OffchainLookup, domain_id::DomainIdProvider, errors::CCIPReaderError,
-    types::ResolveResult,
-};
+use crate::{domain_id::DomainIdProvider, errors::CCIPReaderError, types::ResolveResult};
 use alloy::{
     eips::BlockId,
     hex::FromHex,
@@ -304,8 +301,7 @@ where
             return Err(err.into());
         }
 
-        let offchain_lookup: OffchainLookup =
-            contracts::IOffChain::OffchainLookup::abi_decode(&bytes, true)?;
+        let offchain_lookup = contracts::IOffChain::OffchainLookup::abi_decode(&bytes, true)?;
         let sender = &offchain_lookup.sender;
         if !sender.eq(tx_sender) {
             return Err(CCIPReaderError::Sender {
@@ -555,6 +551,9 @@ mod tests {
 
         let email = "nick@ens.domains";
 
+        // parameters = text(bytes32 node, string calldata key) node: namehash('1.offchainexample.eth'), key: 'email'
+        // tx_data = selector(resolve(bytes,bytes)), namehash(name), parameters
+        // ensip10 interface + encode(dnsencode(name), tx_data)
         let tx = TransactionRequest::default()
             .with_input(hex!("9061b92300000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000001701310f6f6666636861696e6578616d706c650365746800000000000000000000000000000000000000000000000000000000000000000000000000000000008459d1d43c1c9fb8c1fe76f464ccec6d2c003169598fdfcbcb6bbddf6af9c097a39fa0048c00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000005656d61696c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"))
             .with_to(address!("C1735677a60884ABbCF72295E88d47764BeDa282"));
