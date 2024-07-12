@@ -3,15 +3,6 @@ use alloy::sol;
 sol!(
     #[allow(missing_docs)]
     #[sol(rpc)]
-    /**
-     * @dev Interface of the ERC165 standard, as defined in the
-     * https://eips.ethereum.org/EIPS/eip-165[EIP].
-     *
-     * Implementers can declare support of contract interfaces, which can then be
-     * queried by others ({ERC165Checker}).
-     *
-     * For an implementation, see {ERC165}.
-     */
     interface IERC165 {
         function supportsInterface(bytes4 interfaceId) external view returns (bool);
     }
@@ -20,9 +11,6 @@ sol!(
 sol! {
     #[allow(missing_docs)]
     #[sol(rpc)]
-    /**
-     * Interface for the legacy (ETH-only) addr function.
-     */
     interface IAddrResolver {
         event AddrChanged(bytes32 indexed node, address a);
         function addr(bytes32 node) external view returns (address payable);
@@ -58,19 +46,14 @@ sol! {
     #[allow(missing_docs)]
     #[sol(rpc)]
     interface ENS {
-        // Logged when the owner of a node assigns a new owner to a subnode.
         event NewOwner(bytes32 indexed node, bytes32 indexed label, address owner);
 
-        // Logged when the owner of a node transfers ownership to a new account.
         event Transfer(bytes32 indexed node, address owner);
 
-        // Logged when the resolver for a node changes.
         event NewResolver(bytes32 indexed node, address resolver);
 
-        // Logged when the TTL of a node changes
         event NewTTL(bytes32 indexed node, uint64 ttl);
 
-        // Logged when an operator is added or removed.
         event ApprovalForAll(
             address indexed owner,
             address indexed operator,
