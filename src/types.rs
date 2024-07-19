@@ -3,7 +3,14 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone)]
 pub struct ResolveResult {
-    pub addr: Address,
+    pub addr: CCIPType<Address>,
+    pub ccip_read_used: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct CCIPType<T> {
+    pub value: T,
+    pub requests: Vec<CCIPRequest>,
 }
 
 #[derive(Debug, Clone)]

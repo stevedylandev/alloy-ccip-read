@@ -1,6 +1,6 @@
 use crate::{
     domain_id::DomainIdProvider, errors::CCIPReaderError, types::ResolveResult,
-    utils::iter_parent_names,
+    utils::iter_parent_names, CCIPType,
 };
 use alloy::{
     eips::BlockId,
@@ -199,11 +199,19 @@ where
     ) -> Result<ResolveResult, CCIPReaderError> {
         let node = self.domain_id_provider.generate(name);
         let addr_call = contracts::IAddrResolver::addrCall { node };
-        let response: contracts::IAddrResolver::addrReturn = self
+        let mut ccip_read_used = false;
+        let (response, requests) = self
             .query_resolver_parameters(name, resolver_address, addr_call)
             .await?;
-
-        Ok(ResolveResult { addr: response._0 })
+        ccip_read_used |= !requests.is_empty();
+        let addr = CCIPType {
+            value: response._0,
+            requests,
+        };
+        Ok(ResolveResult {
+            addr,
+            ccip_read_used,
+        })
     }
 
     async fn query_resolver_parameters<C: SolCall>(
@@ -211,7 +219,7 @@ where
         name: &str,
         resolver_address: Address,
         call: C,
-    ) -> Result<<C as SolCall>::Return, CCIPReaderError> {
+    ) -> Result<(<C as SolCall>::Return, Vec<CCIPRequest>), CCIPReaderError> {
         let (tx, parse_resp_as_bytes) = if self.supports_wildcard(resolver_address).await? {
             let dns_encode_name =
                 dns_encode(name).map_err(|e| CCIPReaderError::InvalidDomain(e.to_string()))?;
@@ -239,7 +247,7 @@ where
 
         let result = C::abi_decode_returns(&bytes, true)?;
 
-        Ok(result)
+        Ok((result, requests))
     }
 
     #[tracing::instrument(
@@ -494,9 +502,11 @@ mod tests {
     async fn test_eip_2544_ens_wildcards() {
         let reader = default_reader();
 
-        for (ens_name, wildcarded, expected_resolver, expected_addr) in [
+        // hope they will never change their domains 🙏
+        for (ens_name, wildcarded, ccip_read_used, expected_resolver, expected_addr) in [
             (
                 "1.offchainexample.eth",
+                true,
                 true,
                 "0xC1735677a60884ABbCF72295E88d47764BeDa282",
                 "0x41563129cDbbD0c5D3e1c86cf9563926b243834d",
@@ -504,11 +514,13 @@ mod tests {
             (
                 "levvv.xyz",
                 true,
+                true,
                 "0xF142B308cF687d4358410a4cB885513b30A42025",
                 "0xc0de20a37e2dac848f81a93bd85fe4acdde7c0de",
             ),
             (
                 "vitalik.eth",
+                false,
                 false,
                 "0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63",
                 "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
@@ -516,30 +528,43 @@ mod tests {
             (
                 "itslev.cb.id",
                 true,
+                true,
                 "0x1934FC75aD10d7eEd51dc7A92773cAc96A06BE56",
                 "0xD578780f1dA7404d9CC0eEbC9D684c140CC4b638",
+            ),
+            (
+                "moo331.nft-owner.eth",
+                true,
+                false,
+                "0x56942dd93A6778F4331994A1e5b2f59613DE1387",
+                "0x51050ec063d393217B436747617aD1C2285Aeeee",
             ),
         ] {
             let resolver_address = reader.get_resolver(ens_name).await.unwrap();
             assert_eq!(
                 resolver_address,
                 Address::from_str(expected_resolver).unwrap(),
-                "Expected resolver_address to be {expected_resolver}, but got {}",
+                "{ens_name}: expected resolver_address to be {expected_resolver}, but got {}",
                 resolver_address
             );
 
             let supports_wildcard = reader.supports_wildcard(resolver_address).await.unwrap();
             assert_eq!(
                 supports_wildcard, wildcarded,
-                "Wildcard support is {supports_wildcard}, expected to be {wildcarded}"
+                "{ens_name}: wildcard support is {supports_wildcard}, expected to be {wildcarded}"
             );
 
             let result = reader.resolve_name(ens_name).await.unwrap();
             assert_eq!(
-                result.addr,
+                result.addr.value,
                 Address::from_str(expected_addr).unwrap(),
-                "Expected resolved_address to be {expected_addr}, but got {}",
-                result.addr
+                "{ens_name}: expected resolved_address to be {expected_addr}, but got {}",
+                result.addr.value
+            );
+            assert_eq!(
+                result.ccip_read_used, ccip_read_used,
+                "{ens_name}: expected ccip_read_used to be {ccip_read_used}, but got {}",
+                result.ccip_read_used
             );
         }
     }
@@ -586,7 +611,8 @@ mod tests {
             .resolve_name("vitalik")
             .await
             .unwrap()
-            .addr;
+            .addr
+            .value;
         assert_eq!(
             resolver_address,
             Address::from_str("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045").unwrap()
