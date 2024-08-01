@@ -546,7 +546,7 @@ mod tests {
                 true,
                 "0xDB34Da70Cfd694190742E94B7f17769Bc3d84D27",
                 "0x179A862703a4adfb29896552DF9e307980D19285",
-            )
+            ),
         ] {
             let resolver_address = reader.get_resolver(ens_name).await.unwrap();
             assert_eq!(
