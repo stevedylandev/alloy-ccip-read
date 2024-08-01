@@ -197,11 +197,12 @@ where
         name: &str,
         resolver_address: Address,
     ) -> Result<ResolveResult, CCIPReaderError> {
+        let supports_wildcard = self.supports_wildcard(resolver_address).await?;
         let node = self.domain_id_provider.generate(name);
         let addr_call = contracts::IAddrResolver::addrCall { node };
         let mut ccip_read_used = false;
         let (response, requests) = self
-            .query_resolver_parameters(name, resolver_address, addr_call)
+            .query_resolver_parameters(name, resolver_address, addr_call, supports_wildcard)
             .await?;
         ccip_read_used |= !requests.is_empty();
         let addr = CCIPType {
@@ -211,6 +212,7 @@ where
         Ok(ResolveResult {
             addr,
             ccip_read_used,
+            wildcard_used: supports_wildcard,
         })
     }
 
@@ -219,29 +221,28 @@ where
         name: &str,
         resolver_address: Address,
         call: C,
+        supports_wildcard: bool,
     ) -> Result<(<C as SolCall>::Return, Vec<CCIPRequest>), CCIPReaderError> {
-        let (tx, parse_resp_as_bytes) = if self.supports_wildcard(resolver_address).await? {
+        let tx = if supports_wildcard {
             let dns_encode_name =
                 dns_encode(name).map_err(|e| CCIPReaderError::InvalidDomain(e.to_string()))?;
             let data = call.abi_encode();
             let resolver =
                 contracts::IExtendedResolver::new(resolver_address, self.provider.clone());
-            let tx = resolver
+            resolver
                 .resolve(dns_encode_name.into(), data.into())
-                .into_transaction_request();
-            (tx, true)
+                .into_transaction_request()
         } else {
-            let tx = TransactionRequest::default()
+            TransactionRequest::default()
                 .with_to(resolver_address)
-                .with_call(&call);
-            (tx, false)
+                .with_call(&call)
         };
 
         let (mut bytes, requests) = self.call_ccip(&tx).await?;
 
         tracing::debug!(requests =? requests, "finished call_ccip");
 
-        if parse_resp_as_bytes {
+        if supports_wildcard {
             bytes = Bytes::abi_decode(&bytes, true)?;
         }
 
@@ -539,6 +540,13 @@ mod tests {
                 "0x56942dd93A6778F4331994A1e5b2f59613DE1387",
                 "0x51050ec063d393217B436747617aD1C2285Aeeee",
             ),
+            (
+                "offchaindemo.eth",
+                true,
+                true,
+                "0xDB34Da70Cfd694190742E94B7f17769Bc3d84D27",
+                "0x179A862703a4adfb29896552DF9e307980D19285",
+            )
         ] {
             let resolver_address = reader.get_resolver(ens_name).await.unwrap();
             assert_eq!(
@@ -546,12 +554,6 @@ mod tests {
                 Address::from_str(expected_resolver).unwrap(),
                 "{ens_name}: expected resolver_address to be {expected_resolver}, but got {}",
                 resolver_address
-            );
-
-            let supports_wildcard = reader.supports_wildcard(resolver_address).await.unwrap();
-            assert_eq!(
-                supports_wildcard, wildcarded,
-                "{ens_name}: wildcard support is {supports_wildcard}, expected to be {wildcarded}"
             );
 
             let result = reader.resolve_name(ens_name).await.unwrap();
@@ -565,6 +567,11 @@ mod tests {
                 result.ccip_read_used, ccip_read_used,
                 "{ens_name}: expected ccip_read_used to be {ccip_read_used}, but got {}",
                 result.ccip_read_used
+            );
+            assert_eq!(
+                result.wildcard_used, wildcarded,
+                "{ens_name}: wildcard_used is {}, expected to be {wildcarded}",
+                result.wildcard_used
             );
         }
     }

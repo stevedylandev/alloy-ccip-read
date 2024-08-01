@@ -5,6 +5,7 @@ use serde::Deserialize;
 pub struct ResolveResult {
     pub addr: CCIPType<Address>,
     pub ccip_read_used: bool,
+    pub wildcard_used: bool,
 }
 
 #[derive(Debug, Clone)]
