@@ -46,3 +46,5 @@ getrandom = { version = "0.2", features = ["js"] }
 tokio = { version = "1.34.0", features = ["macros", "rt-multi-thread"] }
 alloy = { version = "0.1", features = ["full"] }
 anyhow = "1.0.75"
+pretty_assertions = "1.4.1"
+rstest = "0.23.0"

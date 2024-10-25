@@ -1,0 +1,106 @@
+use super::ens;
+use crate::{
+    contracts, CCIPReader, CCIPReaderError, CCIPType, DomainIdProvider, ResolveResult,
+    ReverseResolveResult,
+};
+use alloy::{primitives::Address, providers::Provider};
+
+pub async fn resolve_d3_name<P: Provider, D: DomainIdProvider>(
+    reader: &CCIPReader<P, D>,
+    resolver_address: Address,
+    name: &str,
+    network: &str,
+) -> Result<ResolveResult, CCIPReaderError> {
+    let call = contracts::D3Connect::resolveCall {
+        name: name.to_string(),
+        network: network.to_string(),
+    };
+    let mut ccip_read_used = false;
+    let (result, requests) =
+        ens::query_resolver_non_wildcarded(reader, resolver_address, call).await?;
+    ccip_read_used |= !requests.is_empty();
+    let addr = CCIPType {
+        value: result._0,
+        requests,
+    };
+    Ok(ResolveResult {
+        addr,
+        ccip_read_used,
+        wildcard_used: false,
+    })
+}
+
+pub async fn reverse_resolve_d3_name<P: Provider, D: DomainIdProvider>(
+    reader: &CCIPReader<P, D>,
+    address: Address,
+    resolver_address: Address,
+) -> Result<ReverseResolveResult, CCIPReaderError> {
+    let call = contracts::D3Connect::reverseResolveCall {
+        addr: address,
+        network: "".to_string(),
+    };
+    let mut ccip_read_used = false;
+    let (result, requests) =
+        ens::query_resolver_non_wildcarded(reader, resolver_address, call).await?;
+    ccip_read_used |= !requests.is_empty();
+    let name = CCIPType {
+        value: result._0,
+        requests,
+    };
+    Ok(ReverseResolveResult {
+        name,
+        ccip_read_used,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{CCIPReader, NamehashIdProvider};
+    use alloy::{
+        providers::{ProviderBuilder, RootProvider},
+        transports::BoxTransport,
+    };
+    use rstest::{fixture, rstest};
+
+    use super::*;
+
+    #[fixture]
+    #[once]
+    fn reader() -> CCIPReader<RootProvider<BoxTransport>, NamehashIdProvider> {
+        let shibarium = ProviderBuilder::default()
+            .on_http("https://puppynet.shibrpc.com".parse().unwrap())
+            .boxed();
+        CCIPReader::new(shibarium)
+    }
+
+    #[rstest]
+    #[tokio::test]
+    #[case(
+        "0x91c2d22ca1028B2E55e3097096494Eb34b7fc81c",
+        "d3connect.shib",
+        "",
+        "0x7309E26de18FD96A34aBBE6063a0b08d78c947C5"
+    )]
+    async fn test_shibarium_d3connect(
+        #[case] resolver_address: Address,
+        #[case] name: &str,
+        #[case] network: &str,
+        #[case] address: Address,
+        reader: &CCIPReader<RootProvider<BoxTransport>, NamehashIdProvider>,
+    ) {
+        let result = resolve_d3_name(reader, resolver_address, name, network)
+            .await
+            .unwrap();
+        assert_eq!(
+            result.addr.value,
+            "0x7309E26de18FD96A34aBBE6063a0b08d78c947C5"
+                .parse::<Address>()
+                .unwrap()
+        );
+
+        let result = reverse_resolve_d3_name(reader, address, resolver_address)
+            .await
+            .unwrap();
+        assert_eq!(result.name.value, "d3connect.shib");
+    }
+}

@@ -125,3 +125,12 @@ sol! {
         ) external view returns (bool);
     }
 }
+
+sol! {
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    interface D3Connect {
+        function resolve(string name, string network) view returns (address);
+        function reverseResolve(address addr, string network) view returns (string);
+    }
+}

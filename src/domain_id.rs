@@ -4,7 +4,7 @@
 /// however this crate provider a way to generate domain ids using other algorithms.
 use alloy::primitives::{keccak256, B256};
 
-pub trait DomainIdProvider: Clone {
+pub trait DomainIdProvider: Clone + Send + Sync {
     fn generate(&self, name: &str) -> B256;
 }
 
