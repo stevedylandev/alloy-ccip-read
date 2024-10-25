@@ -5,15 +5,23 @@ use crate::{
 };
 use alloy::{primitives::Address, providers::Provider};
 
+/// Resolves a D3 name.
+///
+/// # Arguments
+///
+/// * `reader`: The CCIP reader.
+/// * `resolver_address`: The resolver's address.
+/// * `name`: The name to resolve.
+/// * `network`: The network to resolve the name on. Empty string means current network where resolver deployed.
 pub async fn resolve_d3_name<P: Provider, D: DomainIdProvider>(
     reader: &CCIPReader<P, D>,
     resolver_address: Address,
-    name: &str,
-    network: &str,
+    name: impl Into<String>,
+    network: impl Into<String>,
 ) -> Result<ResolveResult, CCIPReaderError> {
     let call = contracts::D3Connect::resolveCall {
-        name: name.to_string(),
-        network: network.to_string(),
+        name: name.into(),
+        network: network.into(),
     };
     let mut ccip_read_used = false;
     let (result, requests) =
@@ -30,14 +38,23 @@ pub async fn resolve_d3_name<P: Provider, D: DomainIdProvider>(
     })
 }
 
+/// Reverse resolves a D3 name.
+///
+/// # Arguments
+///
+/// * `reader`: The CCIP reader.
+/// * `address`: The address to reverse resolve.
+/// * `resolver_address`: The resolver's address.
+/// * `network`: The network to reverse resolve the name on. Empty string means current network where resolver deployed.
 pub async fn reverse_resolve_d3_name<P: Provider, D: DomainIdProvider>(
     reader: &CCIPReader<P, D>,
     address: Address,
     resolver_address: Address,
+    network: impl Into<String>,
 ) -> Result<ReverseResolveResult, CCIPReaderError> {
     let call = contracts::D3Connect::reverseResolveCall {
         addr: address,
-        network: "".to_string(),
+        network: network.into(),
     };
     let mut ccip_read_used = false;
     let (result, requests) =
@@ -98,7 +115,7 @@ mod tests {
                 .unwrap()
         );
 
-        let result = reverse_resolve_d3_name(reader, address, resolver_address)
+        let result = reverse_resolve_d3_name(reader, address, resolver_address, network)
             .await
             .unwrap();
         assert_eq!(result.name.value, "d3connect.shib");

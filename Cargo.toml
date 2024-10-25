@@ -1,6 +1,6 @@
 [package]
 name = "alloy-ccip-read"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Lev Lymarenko its@llev.me"]
 license = "MIT"
 edition = "2018"
@@ -48,3 +48,4 @@ alloy = { version = "0.1", features = ["full"] }
 anyhow = "1.0.75"
 pretty_assertions = "1.4.1"
 rstest = "0.23.0"
+async-std = { version = "1", features = ["attributes", "tokio1"] }
