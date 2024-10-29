@@ -1,13 +1,11 @@
 use crate::{
     consts, contracts,
     utils::{dns_encode, iter_parent_names},
-    CCIPReader, CCIPReaderError, CCIPRequest, CCIPType, DomainIdProvider, ResolveResult,
+    CCIPReader, CCIPReaderError, CCIPResult, DomainIdProvider, ResolveResult,
 };
 use alloy::{
-    network::TransactionBuilder,
     primitives::{Address, Bytes},
     providers::Provider,
-    rpc::types::TransactionRequest,
     sol_types::{SolCall, SolValue},
     transports::BoxTransport,
 };
@@ -117,13 +115,10 @@ pub async fn resolve_name_with_resolver<P: Provider, D: DomainIdProvider>(
     let node = reader.domain_id_provider().generate(name);
     let addr_call = contracts::IAddrResolver::addrCall { node };
     let mut ccip_read_used = false;
-    let (response, requests) =
-        query_resolver(reader, name, resolver_address, addr_call, supports_wildcard).await?;
-    ccip_read_used |= !requests.is_empty();
-    let addr = CCIPType {
-        value: response._0,
-        requests,
-    };
+    let addr = query_resolver(reader, name, resolver_address, addr_call, supports_wildcard)
+        .await?
+        .map(|addr| addr._0);
+    ccip_read_used |= !addr.requests.is_empty();
     Ok(ResolveResult {
         addr,
         ccip_read_used,
@@ -153,7 +148,7 @@ pub async fn query_resolver<P: Provider, D: DomainIdProvider, C: SolCall>(
     resolver_address: Address,
     call: C,
     supports_wildcard: bool,
-) -> Result<(<C as SolCall>::Return, Vec<CCIPRequest>), CCIPReaderError> {
+) -> Result<CCIPResult<<C as SolCall>::Return>, CCIPReaderError> {
     if supports_wildcard {
         query_resolver_wildcarded(reader, name, resolver_address, call).await
     } else {
@@ -181,7 +176,7 @@ pub async fn query_resolver_wildcarded<P: Provider, D: DomainIdProvider, C: SolC
     name: &str,
     resolver_address: Address,
     call: C,
-) -> Result<(<C as SolCall>::Return, Vec<CCIPRequest>), CCIPReaderError> {
+) -> Result<CCIPResult<<C as SolCall>::Return>, CCIPReaderError> {
     let dns_encode_name =
         dns_encode(name).map_err(|e| CCIPReaderError::InvalidDomain(e.to_string()))?;
     let data = call.abi_encode();
@@ -190,15 +185,15 @@ pub async fn query_resolver_wildcarded<P: Provider, D: DomainIdProvider, C: SolC
         .resolve(dns_encode_name.into(), data.into())
         .into_transaction_request();
 
-    let (mut bytes, requests) = reader.call_ccip(&tx).await?;
+    let result = reader.call_ccip(&tx).await?;
 
-    tracing::debug!(requests =? requests, "finished call_ccip");
+    tracing::debug!(requests =? result.requests, "finished call_ccip");
 
-    bytes = Bytes::abi_decode(&bytes, true)?;
+    let bytes = Bytes::abi_decode(&result.value, true)?;
 
-    let result = C::abi_decode_returns(&bytes, true)?;
+    let value = C::abi_decode_returns(&bytes, true)?;
 
-    Ok((result, requests))
+    Ok(CCIPResult::new(value, result.requests))
 }
 
 /// Query a resolver for a given ENS name and call without using wildcard resolution
@@ -216,13 +211,10 @@ pub async fn query_resolver_non_wildcarded<P: Provider, D: DomainIdProvider, C: 
     reader: &CCIPReader<P, D>,
     resolver_address: Address,
     call: C,
-) -> Result<(<C as SolCall>::Return, Vec<CCIPRequest>), CCIPReaderError> {
-    let tx = TransactionRequest::default()
-        .with_to(resolver_address)
-        .with_call(&call);
-    let (result, requests) = reader.call_ccip(&tx).await?;
-    let result = C::abi_decode_returns(&result, true)?;
-    Ok((result, requests))
+) -> Result<CCIPResult<<C as SolCall>::Return>, CCIPReaderError> {
+    reader
+        .call_ccip_solidity_method(resolver_address, call)
+        .await
 }
 
 fn registry<P: Provider>(

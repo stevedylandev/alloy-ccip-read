@@ -1,7 +1,6 @@
 use super::ens;
 use crate::{
-    contracts, CCIPReader, CCIPReaderError, CCIPType, DomainIdProvider, ResolveResult,
-    ReverseResolveResult,
+    contracts, CCIPReader, CCIPReaderError, DomainIdProvider, ResolveResult, ReverseResolveResult,
 };
 use alloy::{primitives::Address, providers::Provider};
 
@@ -24,13 +23,10 @@ pub async fn resolve_d3_name<P: Provider, D: DomainIdProvider>(
         network: network.into(),
     };
     let mut ccip_read_used = false;
-    let (result, requests) =
-        ens::query_resolver_non_wildcarded(reader, resolver_address, call).await?;
-    ccip_read_used |= !requests.is_empty();
-    let addr = CCIPType {
-        value: result._0,
-        requests,
-    };
+    let addr = ens::query_resolver_non_wildcarded(reader, resolver_address, call)
+        .await?
+        .map(|addr| addr._0);
+    ccip_read_used |= addr.ccip_read_used();
     Ok(ResolveResult {
         addr,
         ccip_read_used,
@@ -57,13 +53,10 @@ pub async fn reverse_resolve_d3_name<P: Provider, D: DomainIdProvider>(
         network: network.into(),
     };
     let mut ccip_read_used = false;
-    let (result, requests) =
-        ens::query_resolver_non_wildcarded(reader, resolver_address, call).await?;
-    ccip_read_used |= !requests.is_empty();
-    let name = CCIPType {
-        value: result._0,
-        requests,
-    };
+    let name = ens::query_resolver_non_wildcarded(reader, resolver_address, call)
+        .await?
+        .map(|name| name._0);
+    ccip_read_used |= name.ccip_read_used();
     Ok(ReverseResolveResult {
         name,
         ccip_read_used,

@@ -3,16 +3,16 @@ use crate::{
     domain_id::DomainIdProvider,
     errors::CCIPReaderError,
     utils::{build_reqwest, sanitaze_error_data_from_rpc},
-    CCIPRequest, NamehashIdProvider,
+    CCIPRequest, CCIPResult, NamehashIdProvider,
 };
 use alloy::{
     eips::BlockId,
     hex::FromHex,
     network::TransactionBuilder,
-    primitives::Bytes,
+    primitives::{Address, Bytes},
     providers::{ProviderBuilder, RootProvider},
     rpc::types::TransactionRequest,
-    sol_types::{SolError, SolValue},
+    sol_types::{SolCall, SolError, SolValue},
     transports::{BoxTransport, RpcError, TransportErrorKind},
 };
 use async_recursion::async_recursion;
@@ -127,8 +127,11 @@ where
     P: alloy::providers::Provider,
     D: DomainIdProvider + Send + Sync,
 {
-    pub async fn call(&self, tx: &TransactionRequest) -> Result<Bytes, CCIPReaderError> {
-        self.call_ccip(tx).await.map(|(result, _)| result)
+    pub async fn call_and_only_result(
+        &self,
+        tx: &TransactionRequest,
+    ) -> Result<Bytes, CCIPReaderError> {
+        self.call_ccip(tx).await.map(|result| result.into_value())
     }
 
     /// Perform eth_call with tx, and handle CCIP requests if needed
@@ -136,10 +139,25 @@ where
     pub async fn call_ccip(
         &self,
         tx: &TransactionRequest,
-    ) -> Result<(Bytes, Vec<CCIPRequest>), CCIPReaderError> {
+    ) -> Result<CCIPResult<Bytes>, CCIPReaderError> {
         let mut requests = Vec::new();
         let mut tx = tx.clone();
         self._call(&mut tx, 0, &mut requests).await
+    }
+
+    /// Perform eth_call with tx, and handle CCIP requests if needed
+    /// returning both the result of the call and the CCIP requests made during the call
+    pub async fn call_ccip_solidity_method<C: SolCall>(
+        &self,
+        contract_address: Address,
+        call: C,
+    ) -> Result<CCIPResult<<C as SolCall>::Return>, CCIPReaderError> {
+        let tx = TransactionRequest::default()
+            .with_to(contract_address)
+            .with_call(&call);
+        let result = self.call_ccip(&tx).await?;
+        let value = C::abi_decode_returns(&result.value, true)?;
+        Ok(CCIPResult::new(value, result.requests))
     }
 
     #[tracing::instrument(
@@ -153,7 +171,7 @@ where
         transaction: &mut TransactionRequest,
         attempt: u8,
         requests_buffer: &mut Vec<CCIPRequest>,
-    ) -> Result<(Bytes, Vec<CCIPRequest>), CCIPReaderError> {
+    ) -> Result<CCIPResult<Bytes>, CCIPReaderError> {
         if attempt >= self.max_redirect_attempt {
             // may need more info
             return Err(CCIPReaderError::MaxRedirection);
@@ -165,7 +183,7 @@ where
             .await;
 
         match response {
-            Ok(result) => Ok((result, requests_buffer.to_vec())),
+            Ok(result) => Ok(CCIPResult::new(result, requests_buffer.to_vec())),
             Err(err) => {
                 tracing::debug!("rpc-error: {:?}", err);
                 self._handle_rpc_error(err, transaction, attempt, requests_buffer)
@@ -180,7 +198,7 @@ where
         transaction: &mut TransactionRequest,
         attempt: u8,
         requests_buffer: &mut Vec<CCIPRequest>,
-    ) -> Result<(Bytes, Vec<CCIPRequest>), CCIPReaderError> {
+    ) -> Result<CCIPResult<Bytes>, CCIPReaderError> {
         let tx_sender = transaction
             .to
             .as_ref()
@@ -270,7 +288,7 @@ mod tests {
             .with_input(hex!("9061b92300000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000001701310f6f6666636861696e6578616d706c650365746800000000000000000000000000000000000000000000000000000000000000000000000000000000008459d1d43c1c9fb8c1fe76f464ccec6d2c003169598fdfcbcb6bbddf6af9c097a39fa0048c00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000005656d61696c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"))
             .with_to(address!("C1735677a60884ABbCF72295E88d47764BeDa282"));
 
-        let result = reader.call(&tx).await.unwrap();
+        let result = reader.call_and_only_result(&tx).await.unwrap();
 
         let data: Bytes = Bytes::abi_decode(&result, true).unwrap();
         let record: String = String::abi_decode(&data, true).unwrap();
