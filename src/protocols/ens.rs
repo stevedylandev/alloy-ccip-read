@@ -7,7 +7,6 @@ use alloy::{
     primitives::{Address, Bytes},
     providers::Provider,
     sol_types::{SolCall, SolValue},
-    transports::BoxTransport,
 };
 
 /// The supports_wildcard checks if a given resolver supports the wildcard resolution by calling
@@ -30,8 +29,7 @@ pub async fn supports_wildcard<P: Provider, D>(
     let supported = contract
         .supportsInterface(consts::ENSIP10_RESOLVER_INTERFACE.into())
         .call()
-        .await?
-        ._0;
+        .await?;
     Ok(supported)
 }
 
@@ -60,7 +58,7 @@ pub async fn get_resolver_wildcarded<P: Provider, D: DomainIdProvider>(
 
         let name_id = reader.domain_id_provider().generate(parent_name);
         let data = registry.resolver(name_id).call().await?;
-        let resolver_address = data._0;
+        let resolver_address = data;
 
         if resolver_address != Address::ZERO {
             if parent_name != name && !supports_wildcard(reader, resolver_address).await? {
@@ -117,7 +115,7 @@ pub async fn resolve_name_with_resolver<P: Provider, D: DomainIdProvider>(
     let mut ccip_read_used = false;
     let addr = query_resolver(reader, name, resolver_address, addr_call, supports_wildcard)
         .await?
-        .map(|addr| addr._0);
+        .map(|addr| addr);
     ccip_read_used |= !addr.requests.is_empty();
     Ok(ResolveResult {
         addr,
@@ -189,9 +187,9 @@ pub async fn query_resolver_wildcarded<P: Provider, D: DomainIdProvider, C: SolC
 
     tracing::debug!(requests =? result.requests, "finished call_ccip");
 
-    let bytes = Bytes::abi_decode(&result.value, true)?;
+    let bytes = Bytes::abi_decode(&result.value)?;
 
-    let value = C::abi_decode_returns(&bytes, true)?;
+    let value = C::abi_decode_returns(&bytes)?;
 
     Ok(CCIPResult::new(value, result.requests))
 }
@@ -217,10 +215,7 @@ pub async fn query_resolver_non_wildcarded<P: Provider, D: DomainIdProvider, C: 
         .await
 }
 
-fn registry<P: Provider>(
-    address: Option<Address>,
-    provider: P,
-) -> contracts::ENS::ENSInstance<BoxTransport, P> {
+fn registry<P: Provider>(address: Option<Address>, provider: P) -> contracts::ENS::ENSInstance<P> {
     contracts::ENS::new(address.unwrap_or(consts::MAINNET_ENS_ADDRESS), provider)
 }
 
@@ -243,8 +238,7 @@ mod tests {
                 }
             }
             let provider = ProviderBuilder::default()
-                .on_http(consts::DEFAULT_ETHEREUM_RPC_URL.parse().unwrap())
-                .boxed();
+                .connect_http(consts::DEFAULT_ETHEREUM_RPC_URL.parse().unwrap());
             CCIPReader::builder()
                 .with_provider(provider)
                 .with_domain_id_provider(CustomDomainIdProvider)
@@ -273,13 +267,14 @@ mod tests {
         "0xC1735677a60884ABbCF72295E88d47764BeDa282",
         "0x41563129cDbbD0c5D3e1c86cf9563926b243834d"
     )]
-    #[case(
-        "levvv.xyz",
-        true,
-        true,
-        "0xF142B308cF687d4358410a4cB885513b30A42025",
-        "0xc0de20a37e2dac848f81a93bd85fe4acdde7c0de"
-    )]
+    // No longer valid
+    // #[case(
+    //     "levvv.xyz",
+    //     true,
+    //     true,
+    //     "0xF142B308cF687d4358410a4cB885513b30A42025",
+    //     "0xc0de20a37e2dac848f81a93bd85fe4acdde7c0de"
+    // )]
     #[case(
         "vitalik.eth",
         false,

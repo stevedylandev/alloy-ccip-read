@@ -65,6 +65,9 @@ pub async fn handle_ccip(
     Err(CCIPReaderError::Fetch(CCIPFetchError(errors)))
 }
 
+const SENDER_PLACEHOLDER: &str = "{sender}";
+const DATA_PLACEHOLDER: &str = "{data}";
+
 pub async fn handle_ccip_raw(
     client: &reqwest::Client,
     url: &str,
@@ -81,8 +84,8 @@ pub async fn handle_ccip_raw(
 
     let request = if url.contains("{data}") {
         let href = url
-            .replace("{sender}", &sender_hex)
-            .replace("{data}", &data_hex);
+            .replace(SENDER_PLACEHOLDER, &sender_hex)
+            .replace(DATA_PLACEHOLDER, &data_hex);
 
         client.get(href)
     } else {
