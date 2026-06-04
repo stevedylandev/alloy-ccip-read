@@ -23,9 +23,7 @@ pub async fn resolve_d3_name<P: Provider, D: DomainIdProvider>(
         network: network.into(),
     };
     let mut ccip_read_used = false;
-    let addr = ens::query_resolver_non_wildcarded(reader, resolver_address, call)
-        .await?
-        .map(|addr| addr);
+    let addr = ens::query_resolver_non_wildcarded(reader, resolver_address, call).await?;
     ccip_read_used |= addr.ccip_read_used();
     Ok(ResolveResult {
         addr,
@@ -53,9 +51,7 @@ pub async fn reverse_resolve_d3_name<P: Provider, D: DomainIdProvider>(
         network: network.into(),
     };
     let mut ccip_read_used = false;
-    let name = ens::query_resolver_non_wildcarded(reader, resolver_address, call)
-        .await?
-        .map(|name| name);
+    let name = ens::query_resolver_non_wildcarded(reader, resolver_address, call).await?;
     ccip_read_used |= name.ccip_read_used();
     Ok(ReverseResolveResult {
         name,

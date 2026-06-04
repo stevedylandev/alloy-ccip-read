@@ -82,7 +82,7 @@ pub async fn handle_ccip_raw(
     tracing::debug!("sender: {}", sender_hex);
     tracing::debug!("data: {}", truncate_str(&data_hex, 20));
 
-    let request = if url.contains("{data}") {
+    let request = if url.contains(DATA_PLACEHOLDER) {
         let href = url
             .replace(SENDER_PLACEHOLDER, &sender_hex)
             .replace(DATA_PLACEHOLDER, &data_hex);

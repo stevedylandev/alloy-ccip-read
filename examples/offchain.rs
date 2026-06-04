@@ -11,7 +11,6 @@ async fn main() -> Result<()> {
     let registry_address = None;
     for ens_name in [
         "1.offchainexample.eth",
-        // "levvv.xyz", no longer valid
         "itslev.cb.id",
         "llev.me",
     ] {
