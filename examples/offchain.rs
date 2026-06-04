@@ -9,11 +9,7 @@ async fn main() -> Result<()> {
     let provider = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
     let reader = CCIPReader::new(provider);
     let registry_address = None;
-    for ens_name in [
-        "1.offchainexample.eth",
-        "itslev.cb.id",
-        "llev.me",
-    ] {
+    for ens_name in ["1.offchainexample.eth", "itslev.cb.id", "llev.me"] {
         println!("\nresolving name: {}", ens_name);
 
         let resolver_address =

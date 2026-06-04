@@ -77,7 +77,7 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    #[ignore = "Contract not found"]
+    #[ignore = "D3 http server is down"]
     #[case(
         "0x91c2d22ca1028B2E55e3097096494Eb34b7fc81c",
         "d3connect.shib",
